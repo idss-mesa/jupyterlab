@@ -159,13 +159,15 @@ RUN python3 -m pip install --no-cache-dir jupyter-vscode-proxy \
 RUN mamba install -y -c conda-forge jupyter-server-proxy && \
     mamba clean -afy
 
-# Configure bashrc. The base skel .bashrc already runs the conda shell hook,
-# so conda is NOT re-sourced here. gocmd upgrade is time-boxed: an unguarded
+# Configure bashrc. RUN uses /bin/sh, so printf rather than bash-only $'...'
+# (which wrote a literal "$" line). The motd only prints in interactive shells.
+# The base skel .bashrc already runs the conda shell hook, so conda is NOT
+# re-sourced here. gocmd upgrade is time-boxed: an unguarded
 # network call at every shell open would hang JupyterLab terminal spawns
 # whenever egress is slow or blocked.
 RUN echo ". /etc/profile.d/mesa-prompt.sh" >> ~/.bashrc && \
-    echo '[ ! -z "$TERM" -a -r /etc/motd ] && /etc/motd' >> ~/.bashrc && \
-    echo $'\n# upgrade GoCommands\ntimeout 10 sudo gocmd upgrade > /dev/null 2>&1 || true' >> ~/.bashrc
+    echo 'if [[ $- == *i* ]] && [ -r /etc/motd ]; then /etc/motd; fi' >> ~/.bashrc && \
+    printf '\n# upgrade GoCommands\ntimeout 10 sudo gocmd upgrade > /dev/null 2>&1 || true\n' >> ~/.bashrc
 
 # set path for Go, NPM globals, OpenCode, and Antigravity CLI
 ENV PATH="/home/jovyan/.local/bin:/home/jovyan/.npm-global/bin:/home/jovyan/.opencode/bin:/usr/local/go/bin:${PATH}"
