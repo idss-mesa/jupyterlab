@@ -28,6 +28,25 @@ Then open <http://localhost:8888/lab> (no token — VICE's ingress handles auth)
 
 On VICE, the app runs in the Discovery Environment with your Data Store mounted under `~/data-store`.
 
+## DE tool settings
+
+These live in the Discovery Environment, not in this repo, and must match the image. Change them only together with the Dockerfile.
+
+| Setting | Value |
+| --- | --- |
+| DE app | **MESA JupyterLab** (`cc56cf46-86f7-11f1-9793-008cfa5ae3e1`) |
+| DE tool | `mesa-jupyterlab` (`bcf2ada4-86f7-11f1-9195-008cfa5ae3e1`) |
+| Image | `harbor.cyverse.org/vice/mesa-jupyterlab:latest` |
+| Type | interactive |
+| Container port | **8888** |
+| Working directory | **should be** `/home/jovyan/data-store` (currently unset in the DE; needs a DE admin to fix) (the Data Store CSI mount point; must match the Dockerfile `WORKDIR`) |
+| UID | 1000 |
+| Entrypoint override | none (the image's own startup script does the MESA per-user setup) |
+| Max CPU | default (upstream `vice/jupyter/datascience`: 16 cores) |
+| Memory limit | 16 GiB (upstream 32 GiB) |
+
+JupyterLab listens on 8888, tokenless; VICE's ingress handles auth.
+
 ## Sign in to CyVerse
 
 ```bash
