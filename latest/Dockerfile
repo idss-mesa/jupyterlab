@@ -68,7 +68,7 @@ RUN GCM_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo arm64 || echo x64) && \
 # Node.js 22, locales, terminal tools, s3fs
 RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y locales lolcat neofetch figlet w3m-img imagemagick s3fs fuse nodejs socat bubblewrap && \
+    apt-get install -y locales lolcat fastfetch figlet w3m-img imagemagick s3fs fuse nodejs socat bubblewrap && \
     locale-gen en_US.UTF-8 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -112,10 +112,17 @@ RUN AWS_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo aarch64 || echo x86_64) && \
 # the base env, and an upgrade of pydantic/duckdb/python-irodsclient there
 # would silently break mesa-mcp. cyverse-login also hardcodes
 # /opt/mesa/bin/python3 for iRODS password obfuscation.
+# Pinned to release tags: DuckDB 2.0 (mesa-ducklake >= 0.2) writes catalogs
+# DuckDB 1.x cannot open, and a changed ref also invalidates this layer's cache.
+# The [ducklake] extra enforces mesa-mcp's mesa-ducklake>=0.2 floor; the
+# assertion fails the build if the venv Python or DuckDB is too old.
+ARG MESA_DUCKLAKE_REF=v0.2.0
+ARG MESA_MCP_REF=v0.2.0
 RUN /opt/conda/bin/python3 -m venv /opt/mesa && \
     /opt/mesa/bin/pip install --no-cache-dir \
-      git+https://github.com/idss-mesa/mesa-ducklake.git \
-      git+https://github.com/idss-mesa/mesa-mcp.git && \
+      "mesa-ducklake @ git+https://github.com/idss-mesa/mesa-ducklake@${MESA_DUCKLAKE_REF}" \
+      "mesa-mcp[ducklake] @ git+https://github.com/idss-mesa/mesa-mcp@${MESA_MCP_REF}" && \
+    /opt/mesa/bin/python -c "import sys, duckdb; from importlib.metadata import version as v; assert sys.version_info >= (3, 11), sys.version; assert duckdb.__version__.startswith('2.'), duckdb.__version__; print('mesa-mcp', v('mesa-mcp'), 'mesa-ducklake', v('mesa-ducklake'), 'duckdb', duckdb.__version__)" && \
     ln -s /opt/mesa/bin/mesa-mcp /opt/mesa/bin/mesa-ducklake /usr/local/bin/
 
 # Configure FUSE for non-root users and create OSN directory
