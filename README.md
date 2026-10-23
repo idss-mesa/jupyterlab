@@ -10,7 +10,7 @@ A [JupyterLab](https://jupyterlab.readthedocs.io/) data-science environment for 
 | --- | --- |
 | **IDEs** | JupyterLab (port 8888), RStudio Server (`/rstudio` Launcher card), Shiny Server, VS Code (code-server) — via [jupyter-server-proxy](https://github.com/jupyterhub/jupyter-server-proxy) |
 | **AI agent CLIs** | Claude Code (`claude`), OpenAI Codex (`codex`), OpenCode (`opencode`), Antigravity (`agy`), Claude Code Router (`ccr`) |
-| **MCP servers** | `irods` (CyVerse Data Store), `mesa` ([mesa-mcp](https://github.com/idss-mesa/mesa-mcp) + [mesa-ducklake](https://github.com/idss-mesa/mesa-ducklake)), `formation` ([formation-mcp](https://github.com/idss-mesa/formation-mcp), CyVerse DE), `filesystem` — pre-registered for every agent CLI |
+| **MCP servers** | `irods` (CyVerse Data Store), `mesa` ([mesa-mcp](https://github.com/idss-mesa/mesa-mcp) + [mesa-ducklake](https://github.com/idss-mesa/mesa-ducklake), pinned to `v0.2.0` on DuckDB 2.0: catalog files it creates cannot be opened by DuckDB 1.x), `formation` ([formation-mcp](https://github.com/idss-mesa/formation-mcp), CyVerse DE), `filesystem` — pre-registered for every agent CLI |
 | **AI Verde** | `aiverde-setup` helper wires OpenCode + Claude Code (via `ccr`) to `https://llm-api.cyverse.ai` |
 | **CyVerse data** | GoCommands (`gocmd`), iRODS config, `s3fs`/OSN mounts (`osn-mount.sh`), AWS CLI |
 | **Dev** | GitHub CLI (`gh`), Git Credential Manager, Go 1.25, Node.js 22 |

@@ -316,6 +316,14 @@ else
     record "T8 nvitop on PATH" FAIL "command -v nvitop failed in an interactive shell as uid 1000"
 fi
 
+# ---- T9: MESA MCP stack ------------------------------------------------------------
+# MESA MCP stack: /opt/mesa imports mesa-mcp + mesa-ducklake on DuckDB 2.x (catalogs it writes are DuckDB 2-only)
+if out=$(docker run --rm --entrypoint /opt/mesa/bin/python "$IMAGE" -c "import duckdb, mesa_mcp, mesa_ducklake; from importlib.metadata import version as v; assert duckdb.__version__.startswith('2.'), 'duckdb ' + duckdb.__version__; print('mesa-mcp', v('mesa-mcp'), 'mesa-ducklake', v('mesa-ducklake'), 'duckdb', duckdb.__version__)" 2>&1); then
+    record "T9 mesa-mcp DuckDB 2" PASS "$out"
+else
+    record "T9 mesa-mcp DuckDB 2" FAIL "$(printf '%s' "$out" | tail -1)"
+fi
+
 # ---- summary -----------------------------------------------------------------------
 fail=0
 printf '\n%-24s %-6s %s\n' TEST RESULT DETAIL
