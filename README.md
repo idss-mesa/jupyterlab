@@ -35,17 +35,23 @@ These live in the Discovery Environment, not in this repo, and must match the im
 | Setting | Value |
 | --- | --- |
 | DE app | **MESA JupyterLab** (`cc56cf46-86f7-11f1-9793-008cfa5ae3e1`) |
-| DE tool | `mesa-jupyterlab` (`bcf2ada4-86f7-11f1-9195-008cfa5ae3e1`) |
+| DE tool (version `1.1.0`) | `mesa-jupyterlab` (`bcf2ada4-86f7-11f1-9195-008cfa5ae3e1`) |
 | Image | `harbor.cyverse.org/vice/mesa-jupyterlab:latest` |
 | Type | interactive |
 | Container port | **8888** |
-| Working directory | **should be** `/home/jovyan/data-store` (currently unset in the DE; needs a DE admin to fix) (the Data Store CSI mount point; must match the Dockerfile `WORKDIR`) |
+| Working directory | **should be** `/home/jovyan/data-store` (the Data Store CSI mount point; must match the Dockerfile `WORKDIR`). Currently unset on this tool; the GPU tool has it |
 | UID | 1000 |
+| Network mode | `bridge` |
+| Skip /tmp mount | `false` (the GPU tool uses `true`) |
+| VICE proxy | not set on the tool (the GPU tool sets cas-proxy explicitly, see below) |
+| PIDs limit | 1024 |
 | Entrypoint override | none (the image's own startup script does the MESA per-user setup) |
 | Max CPU | default (upstream `vice/jupyter/datascience`: 16 cores) |
 | Memory limit | 16 GiB (upstream 32 GiB) |
 
 JupyterLab listens on 8888, tokenless; VICE's ingress handles auth.
+
+Two older tools on the same image are not used by **MESA JupyterLab** or its GPU copy: `mesa-jupyterlab-vice` (`87658c60-8701-11f1-b72a-008cfa5ae3e1`) and `mesa-jupyterlab-noentry` (`0ad8bf9c-8700-11f1-aa26-008cfa5ae3e1`, behind the private **MESA JupyterLab (noentry diagnostic)** app).
 
 ## Sign in to CyVerse
 
@@ -180,7 +186,8 @@ The GPU app is a copy of the **MESA JupyterLab** app that points at a separate G
 
 | Setting | Value |
 | --- | --- |
-| DE tool | `mesa-jupyterlab-gpu` (not created yet) |
+| DE app | **MESA JupyterLab (GPU)** (`1cf63d24-ba83-11f1-9ddb-008cfa5ae3e1`, private) |
+| DE tool (version `1.1.0`) | `mesa-jupyterlab-gpu` (`0933c1e4-ba83-11f1-8e6f-008cfa5ae3e1`) |
 | Image | `harbor.cyverse.org/vice/mesa-jupyterlab:gpu` |
 | Container port / working dir / UID | **8888** / `/home/jovyan/data-store` / 1000. The working dir is set explicitly in `de-tool.json`; the CPU tool should match but is currently unset (see above) |
 | GPUs | `min_gpus` = `max_gpus` = **1** (with `min_gpus` unset, a launch defaults to 0 GPUs) |
@@ -193,7 +200,7 @@ The GPU app is a copy of the **MESA JupyterLab** app that points at a separate G
 | PIDs limit | `pids_limit` 1024 (GPU tool) |
 | Entrypoint override | none (the image's `mesa-gpu-entrypoint` runs the CPU `entry.sh`) |
 
-The CPU table above predates the network-mode, /tmp-mount and VICE-proxy rows, so it does not list them; set them on the GPU tool as shown (`de-tool.json` does).
+The CPU tool differs from this table in its working dir, /tmp mount and VICE proxy (see above); set them on the GPU tool as shown (`de-tool.json` does).
 
 ## Build
 
