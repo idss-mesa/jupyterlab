@@ -39,11 +39,11 @@ These live in the Discovery Environment, not in this repo, and must match the im
 | Image | `harbor.cyverse.org/vice/mesa-jupyterlab:latest` |
 | Type | interactive |
 | Container port | **8888** |
-| Working directory | **should be** `/home/jovyan/data-store` (the Data Store CSI mount point; must match the Dockerfile `WORKDIR`). Currently unset on this tool; the GPU tool has it |
+| Working directory | `/home/jovyan/data-store` (the Data Store CSI mount point; must match the Dockerfile `WORKDIR`) |
 | UID | 1000 |
 | Network mode | `bridge` |
-| Skip /tmp mount | `false` (the GPU tool uses `true`) |
-| VICE proxy | not set on the tool (the GPU tool sets cas-proxy explicitly, see below) |
+| Skip /tmp mount | `true` |
+| VICE proxy | `interactive_apps` = cas-proxy (`discoenv/cas-proxy`, `cas_url` `https://olson.cyverse.org/cas`, `cas_validate` `validate`); JupyterLab has no token, so cas-proxy is its only login |
 | PIDs limit | 1024 |
 | Entrypoint override | none (the image's own startup script does the MESA per-user setup) |
 | Max CPU | default (upstream `vice/jupyter/datascience`: 16 cores) |
@@ -189,7 +189,7 @@ The GPU app is a copy of the **MESA JupyterLab** app that points at a separate G
 | DE app | **MESA JupyterLab (GPU)** (`1cf63d24-ba83-11f1-9ddb-008cfa5ae3e1`, private) |
 | DE tool (version `1.1.0`) | `mesa-jupyterlab-gpu` (`0933c1e4-ba83-11f1-8e6f-008cfa5ae3e1`) |
 | Image | `harbor.cyverse.org/vice/mesa-jupyterlab:gpu` |
-| Container port / working dir / UID | **8888** / `/home/jovyan/data-store` / 1000. The working dir is set explicitly in `de-tool.json`; the CPU tool should match but is currently unset (see above) |
+| Container port / working dir / UID | **8888** / `/home/jovyan/data-store` / 1000, as on the CPU tool |
 | GPUs | `min_gpus` = `max_gpus` = **1** (with `min_gpus` unset, a launch defaults to 0 GPUs) |
 | GPU model | `gpu_models: ["NVIDIA-A16"]` |
 | Shared memory | device `{"host_path": "/dev/shm", "container_path": "4Gi"}`: a 4 GiB RAM-backed `/dev/shm` for PyTorch DataLoader workers (counts against memory) |
@@ -200,7 +200,7 @@ The GPU app is a copy of the **MESA JupyterLab** app that points at a separate G
 | PIDs limit | `pids_limit` 1024 (GPU tool) |
 | Entrypoint override | none (the image's `mesa-gpu-entrypoint` runs the CPU `entry.sh`) |
 
-The CPU tool differs from this table in its working dir, /tmp mount and VICE proxy (see above); set them on the GPU tool as shown (`de-tool.json` does).
+The CPU and GPU tools share the network mode, /tmp mount, VICE proxy and working dir; `de-tool.json` sets them for the GPU tool.
 
 ## Build
 
