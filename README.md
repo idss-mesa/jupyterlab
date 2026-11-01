@@ -105,7 +105,7 @@ It validates the key against `/v1/models`, lists your models, and writes `~/.con
 | **PyTorch (CUDA 12.6)** | `torch 2.14.0+cu126`, `torchvision 0.29.0+cu126` in the conda base env, so the default **Python 3** kernel, terminals and anything else using `/opt/conda/bin/python` see the GPU |
 | **ML libraries** | transformers, accelerate, peft, sentence-transformers, safetensors, bitsandbytes, Lightning, timm, torchmetrics, TorchGeo, CuPy (`cupy-cuda12x`), `huggingface_hub` (`hf`), `ollama` Python client |
 | **JupyterLab** | [NVDashboard](https://github.com/rapidsai/jupyterlab-nvdashboard) 0.15 (**GPU Dashboards** in the left sidebar); [Jupyter AI](https://github.com/jupyterlab/jupyter-ai) 3.2 chat, which picks up the installed OpenCode CLI as the `@OpenCode` persona and serves notebook tools to agents over MCP on `localhost:3001` (loopback only) |
-| **Local LLMs** | [Ollama](https://ollama.com) 0.34.4, started in the background on `127.0.0.1:11434` (loopback only, no models baked in); `ollama-setup`; OpenCode and Codex pre-wired to it |
+| **Local LLMs** | [Ollama](https://ollama.com) 0.40.11, started in the background on `127.0.0.1:11434` (loopback only, no models baked in); `ollama-setup`; OpenCode and Codex pre-wired to it |
 | **GPU tools** | `nvidia-smi` (from the host driver), `nvtop`, `nvitop`, `mesa-gpu-check`, a GPU panel on the terminal landing screen, NVIDIA CUDA 13.4 forward-compat libraries |
 
 The GPU image is about **22.8 GB** uncompressed (CPU `:latest`: 12.4 GB). Most of the difference is PyTorch plus its CUDA wheels (6.6 GB), Ollama (2.2 GB), the ML libraries (1.0 GB) and the CUDA compat driver + nvtop (0.5 GB).
@@ -158,7 +158,7 @@ mesa-gpu-check --ollama   # also runs qwen3:0.6b (~0.5 GB) and asserts it is 100
 
 - **Never bakes NVIDIA driver libraries.** The NVIDIA container runtime injects the host driver (`nvidia-smi`, `libcuda`). The build fails if a driver package sneaks in, and an apt pin (`/etc/apt/preferences.d/mesa-no-nvidia-driver`) stops `sudo apt install cuda-drivers` / `nvidia-driver-*` / `libnvidia-*` from shadowing the host driver in a session; CUDA toolkit packages (`cuda-toolkit-12-x`) stay installable. To install driver packages on purpose, `sudo rm` that file first.
 - **PyTorch cu126** runs natively on any driver ≥ R525, which covers the DE's A16 nodes and older T4/A100 hosts. It never uses PyPI's default `torch`, which is the CUDA 13 build and needs R580+.
-- **Ollama 0.34.4** needs R550+ for its CUDA 12 runner and R580+ for CUDA 13; other CUDA 13 software needs R580+. On older data-center drivers (e.g. R535), `/etc/profile.d/mesa-gpu-env.sh` enables NVIDIA's CUDA 13.4 forward-compat driver (`/usr/local/cuda-13.4/compat`) per session, including `docker exec` / `kubectl exec` bash shells (via `/etc/bash.bashrc`). It does so only when the host's CUDA API is < 13 and the compat driver initialises. R580+ hosts and GPUs without forward-compat support keep the host driver.
+- **Ollama 0.40.11** needs R550+ for its CUDA 12 runner and R580+ for CUDA 13; other CUDA 13 software needs R580+. On older data-center drivers (e.g. R535), `/etc/profile.d/mesa-gpu-env.sh` enables NVIDIA's CUDA 13.4 forward-compat driver (`/usr/local/cuda-13.4/compat`) per session, including `docker exec` / `kubectl exec` bash shells (via `/etc/bash.bashrc`). It does so only when the host's CUDA API is < 13 and the compat driver initialises. R580+ hosts and GPUs without forward-compat support keep the host driver.
 - To opt out, set `MESA_DISABLE_CUDA_COMPAT=1`. To skip the background Ollama server, set `MESA_OLLAMA_AUTOSTART=0`. Both are read once at container start, before `entry.sh` sources your `~/.env*` files, so setting them there has no effect: on VICE set them as environment variables on the DE app (locally, `docker run -e`).
 - `NVIDIA_DRIVER_CAPABILITIES=compute,utility`. `NVIDIA_VISIBLE_DEVICES` is left to the DE / `docker --gpus`.
 - Version pins are build args in `gpu/Dockerfile` (`TORCH_INDEX_URL`, `TORCH_VERSION`, `TORCHVISION_VERSION`, `OLLAMA_VERSION`/`OLLAMA_SHA256`, `CUDA_COMPAT_VERSION`). `CUDA_COMPAT_VERSION` (13.4) is the single compat pin: it sets both the `cuda-compat-13-4` package and `MESA_CUDA_COMPAT_DIR` (`/usr/local/cuda-13.4/compat`), and the build fails if that directory has no `libcuda.so.1`.
@@ -260,3 +260,30 @@ Makefile                        local build/push/run (+ pull-base/build-gpu/test
 
 - [CyVerse VICE apps](https://learning.cyverse.org/vice/) · [GoCommands](https://learning.cyverse.org/ds/gocommands/) · [AI Verde](https://aiverde-docs.cyverse.ai/) · [jupyter/docker-stacks](https://github.com/jupyter/docker-stacks)
 - MESA org: <https://github.com/idss-mesa>
+
+## AI Sandbox variants (`:sandbox`, `:gpu-sandbox`)
+
+The `:latest` and `:gpu` images keep passwordless `sudo` on purpose: VICE lets a
+human modify the environment they are working in. The **AI Sandbox** variants
+(`sandbox/Dockerfile`) are the same images with every path from UID 1000 to root
+removed, for sessions driven by AI agents (Claude Code, Codex, OpenCode, Goose,
+Antigravity):
+
+- `sudo` purged (package, `/etc/sudoers*`, group memberships); `su`/`pkexec` cannot switch user
+- no setuid/setgid binaries and no file capabilities anywhere in the image
+- every account password locked, `/etc/passwd` and `/etc/group` not group-writable, no world-writable system files
+- `MESA_SANDBOX=1` in every shell and a marker at `/etc/mesa/sandbox`
+
+Build, test and push (the sandbox layers on the **published** base, so pull or
+build `:latest`/`:gpu` first):
+
+```bash
+make build-sandbox test-sandbox push-sandbox             # :sandbox      <- :latest
+make build-gpu-sandbox test-gpu-sandbox push-gpu-sandbox # :gpu-sandbox  <- :gpu
+```
+
+`sandbox/test-sandbox.sh` starts the image as VICE does (UID 1000) and fails if
+`sudo`, a setuid file, a file capability, a root process or a writable `/etc`
+is found, or if the app does not answer. `harbor-sandbox.yml` is the manual
+GitHub workflow equivalent. Register each sandbox tag as its own DE tool
+(same spec as the base tool).
