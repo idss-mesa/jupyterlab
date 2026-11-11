@@ -13,6 +13,32 @@ USER root
 # Target architecture set by buildx: amd64 or arm64
 ARG TARGETARCH
 
+# ---------------------------------------------------------------------------
+# Pinned, checksum-verified downloads (2026-10 security review). Bump the
+# version AND its hash together: a mismatch fails the build.
+# ---------------------------------------------------------------------------
+ARG GO_VERSION=1.27.3
+ARG GO_SHA256_AMD64=65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40
+ARG GO_SHA256_ARM64=a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49
+ARG NODE_VERSION=22.23.4
+ARG GOCMD_VERSION=v0.12.5
+ARG GOCMD_SHA256_AMD64=af551f8cb2f3f5df63fb3a8eb1bf605c7f27e50ec10283a5375190239db9f57a
+ARG GOCMD_SHA256_ARM64=2741c2a2c894ad156b63ea7ca16f5e7931662bd16e6331d4fbcfea904cc76143
+ARG GCM_VERSION=2.7.3
+ARG GCM_SHA256_X64=a5431e1b6f25aa8b424e747d880f86e74c739ad52e72c924a7b1a25d87ac7e72
+ARG GCM_SHA256_ARM64=f5995901ef3a2ffc4442e4a9a92c8dfdc8f1df1affe8ef1d037b7ad3302b923b
+ARG AWSCLI_VERSION=2.38.5
+ARG AWSCLI_SHA256_X86_64=5def7d1b7e55d892f9a381bb2cb2081a685712464be0d36d5d706af0ac48d0d3
+ARG AWSCLI_SHA256_AARCH64=07711a936e9d271045ab937d2c2c5390c25f419e4ba9e25adb9e996031e3f6be
+ARG DUCKDB_SHA256_AMD64=c6507206baf7793c6013dbd82368469a45f20dc0e17a6f92f204602f652ed2bc
+ARG DUCKDB_SHA256_ARM64=859e1875d2a9515fbb4bf8871061437a14af82320da68c753f094c4b776348fe
+ARG CLAUDE_CODE_VERSION=2.1.310
+ARG CODEX_VERSION=0.164.0
+ARG CCR_VERSION=3.1.3
+ARG MCP_FS_VERSION=2.0.1
+ARG OPENCODE_VERSION=1.19.4
+ARG CODE_SERVER_VERSION=4.143.1
+
 # Add sudo to user
 ARG LOCAL_USER=jovyan
 
@@ -41,7 +67,7 @@ RUN apt-get update && \
     libglib2.0-0 libxext6 libsm6 libxrender1 \
     libfreetype6-dev libssl-dev pkg-config psmisc libx11-dev gcc libclang-dev \
     gettext less software-properties-common apt-utils glances htop nano \
-    gdebi-core gnupg2 git mercurial subversion tmux grep sed dpkg unzip && \
+    gdebi-core gnupg2 git mercurial subversion tmux grep sed dpkg unzip xz-utils && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -49,8 +75,9 @@ RUN apt-get update && \
 # Posit ships a single jammy deb as the official artifact for Ubuntu 22/24;
 # there are no arm64 server debs, so both are amd64-only.
 RUN GCM_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo arm64 || echo x64) && \
-    wget -q https://github.com/git-ecosystem/git-credential-manager/releases/download/v2.7.3/gcm-linux-${GCM_ARCH}-2.7.3.deb \
-         -O /tmp/gcm.deb && \
+    GCM_SHA256=$([ "$TARGETARCH" = "arm64" ] && echo "$GCM_SHA256_ARM64" || echo "$GCM_SHA256_X64") && \
+    curl -fsSL -o /tmp/gcm.deb "https://github.com/git-ecosystem/git-credential-manager/releases/download/v${GCM_VERSION}/gcm-linux-${GCM_ARCH}-${GCM_VERSION}.deb" && \
+    echo "${GCM_SHA256}  /tmp/gcm.deb" | sha256sum -c - && \
     apt-get update && \
     apt-get install -y /tmp/gcm.deb && \
     if [ "$TARGETARCH" = "amd64" ]; then \
@@ -65,10 +92,9 @@ RUN GCM_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo arm64 || echo x64) && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Node.js 22, locales, terminal tools, s3fs
+# Locales, terminal tools, s3fs
 RUN apt-get update && \
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y locales lolcat fastfetch figlet w3m-img imagemagick s3fs fuse nodejs socat bubblewrap && \
+    apt-get install -y locales lolcat fastfetch figlet w3m-img imagemagick s3fs fuse socat bubblewrap && \
     locale-gen en_US.UTF-8 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -80,8 +106,19 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     apt update && apt install -y gh && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Go
-RUN wget -q -c https://dl.google.com/go/go1.25.5.linux-${TARGETARCH}.tar.gz -O - | tar -xz -C /usr/local
+# Node.js from the official tarball, verified against nodejs.org's SHASUMS256.txt
+# (replaces the unpinned `curl deb.nodesource.com/setup_22.x | bash`)
+RUN NODE_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo arm64 || echo x64) && \
+    curl -fsSL -o /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" && \
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" | grep " node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz$" | sed 's|  .*|  /tmp/node.tar.xz|' | sha256sum -c - && \
+    tar -xJ -C /usr/local --strip-components=1 --exclude='*/CHANGELOG.md' --exclude='*/LICENSE' --exclude='*/README.md' -f /tmp/node.tar.xz && \
+    rm -f /tmp/node.tar.xz && node --version && npm --version
+
+# Install Go (pinned + sha256; Go >= 1.25.7 fixes CVE-2025-68121 in every binary built here)
+RUN GO_SHA256=$([ "$TARGETARCH" = "arm64" ] && echo "$GO_SHA256_ARM64" || echo "$GO_SHA256_AMD64") && \
+    curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" && \
+    echo "${GO_SHA256}  /tmp/go.tgz" | sha256sum -c - && \
+    tar -xz -C /usr/local -f /tmp/go.tgz && rm -f /tmp/go.tgz
 
 # Build the iRODS MCP server (stdio MCP access to the CyVerse Data Store)
 # https://github.com/idss-mesa/irods-mcp-server
@@ -92,20 +129,23 @@ RUN git clone --depth 1 https://github.com/idss-mesa/irods-mcp-server /tmp/irods
     CGO_ENABLED=0 GOPATH=/tmp/go GOCACHE=/tmp/go-cache /usr/local/go/bin/go build -o /usr/local/bin/irods-mcp-server ./cmd/main.go && \
     cd / && rm -rf /tmp/irods-mcp-server /tmp/go /tmp/go-cache
 
-# Install GoCommands
+# Install GoCommands (pinned + sha256; it is NOT self-upgraded from ~/.bashrc any more)
 # https://learning.cyverse.org/ds/gocommands/
-RUN cd /usr/local/bin && \
-    GOCMD_VER=$(curl -L -s https://raw.githubusercontent.com/cyverse/gocommands/main/VERSION.txt); \
-    curl -L -s https://github.com/cyverse/gocommands/releases/download/${GOCMD_VER}/gocmd-${GOCMD_VER}-linux-${TARGETARCH}.tar.gz | tar zxvf -
+RUN GOCMD_SHA256=$([ "$TARGETARCH" = "arm64" ] && echo "$GOCMD_SHA256_ARM64" || echo "$GOCMD_SHA256_AMD64") && \
+    curl -fsSL -o /tmp/gocmd.tgz "https://github.com/cyverse/gocommands/releases/download/${GOCMD_VERSION}/gocmd-${GOCMD_VERSION}-linux-${TARGETARCH}.tar.gz" && \
+    echo "${GOCMD_SHA256}  /tmp/gocmd.tgz" | sha256sum -c - && \
+    tar -xz -C /usr/local/bin -f /tmp/gocmd.tgz && rm -f /tmp/gocmd.tgz && gocmd --version
 
 ENV PATH=${PATH}:/usr/games
 
-# install AWS CLI
+# install AWS CLI (pinned + sha256)
 RUN AWS_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo aarch64 || echo x86_64) && \
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}.zip" -o "awscliv2.zip" && \
-    unzip awscliv2.zip && \
-    ./aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update && \
-    rm -rf awscliv2.zip aws
+    AWS_SHA256=$([ "$TARGETARCH" = "arm64" ] && echo "$AWSCLI_SHA256_AARCH64" || echo "$AWSCLI_SHA256_X86_64") && \
+    curl -fsSL -o /tmp/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}-${AWSCLI_VERSION}.zip" && \
+    echo "${AWS_SHA256}  /tmp/awscliv2.zip" | sha256sum -c - && \
+    unzip -q /tmp/awscliv2.zip -d /tmp && \
+    /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update && \
+    rm -rf /tmp/awscliv2.zip /tmp/aws
 
 # Install mesa-mcp and mesa-ducklake (https://github.com/idss-mesa)
 # into a dedicated venv, isolated from /opt/conda: users pip/mamba freely into
@@ -130,8 +170,10 @@ RUN /opt/conda/bin/python3 -m venv /opt/mesa && \
 # open here too.
 ARG DUCKDB_VERSION=2.0.0
 RUN DUCKDB_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo arm64 || echo amd64) && \
-    curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb-cli-linux-${DUCKDB_ARCH}.tar.gz" | \
-        tar -xz -C /usr/local/bin duckdb && \
+    DUCKDB_SHA256=$([ "$TARGETARCH" = "arm64" ] && echo "$DUCKDB_SHA256_ARM64" || echo "$DUCKDB_SHA256_AMD64") && \
+    curl -fsSL -o /tmp/duckdb.tgz "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb-cli-linux-${DUCKDB_ARCH}.tar.gz" && \
+    echo "${DUCKDB_SHA256}  /tmp/duckdb.tgz" | sha256sum -c - && \
+    tar -xz -C /usr/local/bin -f /tmp/duckdb.tgz duckdb && rm -f /tmp/duckdb.tgz && \
     duckdb --version | grep "^v${DUCKDB_VERSION} " && \
     /opt/conda/bin/pip install --no-cache-dir "duckdb==${DUCKDB_VERSION}" && \
     chown -R "$(stat -c %u:%g /opt/conda)" /opt/conda/lib/python3*/site-packages/duckdb* && \
@@ -153,9 +195,14 @@ USER jovyan
 # (npm install is preferred over claude.ai/install.sh for Docker builds)
 # ccr (claude-code-router) lets Claude Code talk to AI Verde's non-Anthropic
 # models; see aiverde-setup and https://github.com/musistudio/claude-code-router
+# Versions are pinned (ARGs above); the filesystem MCP server is installed here so the
+# agent configs run it directly instead of `npx -y` fetching the newest release at
+# every agent start.
 RUN npm config set prefix /home/jovyan/.npm-global && \
-    npm install -g @anthropic-ai/claude-code @openai/codex @musistudio/claude-code-router && \
-    npm cache clean --force
+    npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@openai/codex@${CODEX_VERSION}" \
+        "@musistudio/claude-code-router@${CCR_VERSION}" "@modelcontextprotocol/server-filesystem@${MCP_FS_VERSION}" && \
+    npm cache clean --force && \
+    test -x /home/jovyan/.npm-global/bin/mcp-server-filesystem
 
 # Install Antigravity CLI (replaces deprecated Google Gemini CLI — deadline June 18 2026)
 # https://antigravity.google/blog/introducing-google-antigravity-cli
@@ -164,10 +211,13 @@ RUN mkdir -p /home/jovyan/.cache/antigravity/staging && \
     curl -fsSL https://antigravity.google/cli/install.sh | bash
 
 # Install OpenCode (https://opencode.ai/) — --no-modify-path avoids shell detection hang in Docker
-RUN curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+RUN curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path --version "${OPENCODE_VERSION}" && \
+    /home/jovyan/.opencode/bin/opencode --version | grep -F "${OPENCODE_VERSION}"
 
 # Install VS Code (code-server); drop its ~100 MB install cache afterwards
-RUN curl -fsSL https://code-server.dev/install.sh | sh && \
+# (install.sh picks the .deb on Ubuntu: code-server lands in /usr/bin)
+RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --version "${CODE_SERVER_VERSION}" && \
+    code-server --version | grep -F "${CODE_SERVER_VERSION}" && \
     rm -rf /home/jovyan/.cache/code-server
 
 # Jupyter proxies: VS Code, RStudio (rsession), and Shiny cards in the Launcher
@@ -178,15 +228,12 @@ RUN python3 -m pip install --no-cache-dir jupyter-vscode-proxy \
 RUN mamba install -y -c conda-forge jupyter-server-proxy && \
     mamba clean -afy
 
-# Configure bashrc. RUN uses /bin/sh, so printf rather than bash-only $'...'
-# (which wrote a literal "$" line). The motd only prints in interactive shells.
-# The base skel .bashrc already runs the conda shell hook, so conda is NOT
-# re-sourced here. gocmd upgrade is time-boxed: an unguarded
-# network call at every shell open would hang JupyterLab terminal spawns
-# whenever egress is slow or blocked.
+# Configure bashrc. The motd only prints in interactive shells. The base skel
+# .bashrc already runs the conda shell hook, so conda is NOT re-sourced here.
+# No per-shell `sudo gocmd upgrade`: gocmd is pinned at build time (a root-run
+# self-updater on every terminal open was a supply-chain path).
 RUN echo ". /etc/profile.d/mesa-prompt.sh" >> ~/.bashrc && \
-    echo 'if [[ $- == *i* ]] && [ -r /etc/motd ]; then /etc/motd; fi' >> ~/.bashrc && \
-    printf '\n# upgrade GoCommands\ntimeout 10 sudo gocmd upgrade > /dev/null 2>&1 || true\n' >> ~/.bashrc
+    echo 'if [[ $- == *i* ]] && [ -r /etc/motd ]; then /etc/motd; fi' >> ~/.bashrc
 
 # set path for Go, NPM globals, OpenCode, and Antigravity CLI
 ENV PATH="/home/jovyan/.local/bin:/home/jovyan/.npm-global/bin:/home/jovyan/.opencode/bin:/usr/local/go/bin:${PATH}"
