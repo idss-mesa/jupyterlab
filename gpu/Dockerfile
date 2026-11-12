@@ -83,7 +83,13 @@ ENV MESA_CUDA_COMPAT_DIR=/usr/local/cuda-${CUDA_COMPAT_VERSION}/compat
 # libcuda/NVML; baking driver userspace would shadow it and break nvidia-smi.
 # The guard greps to /dev/null, not grep -q: under pipefail an early grep -q
 # exit SIGPIPEs dpkg and the if would silently pass.
+# Ubuntu 26.04 packages nvtop with the file capability cap_perfmon. A container
+# does not have that capability in its bounding set, so the kernel refuses to
+# start the binary at all ("Operation not permitted"). Monitoring NVIDIA GPUs
+# does not need it: reinstalling the file drops the capability, and the
+# version check fails the build if nvtop still cannot start.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl zstd nvtop && \
+    install -m 0755 /usr/bin/nvtop /usr/bin/nvtop.nocap && mv -f /usr/bin/nvtop.nocap /usr/bin/nvtop && nvtop --version && \
     curl -fsSL -o /tmp/cuda-keyring.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb && \
     dpkg -i /tmp/cuda-keyring.deb && rm -f /tmp/cuda-keyring.deb && \
     apt-get update && apt-get install -y --no-install-recommends "cuda-compat-$(printf '%s' "${CUDA_COMPAT_VERSION}" | tr . -)" && \

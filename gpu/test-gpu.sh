@@ -315,6 +315,13 @@ if [ -n "$out" ]; then
 else
     record "T8 nvitop on PATH" FAIL "command -v nvitop failed in an interactive shell as uid 1000"
 fi
+# nvtop must actually start: Ubuntu 26.04 ships it with the file capability
+# cap_perfmon, which a container lacks, and the kernel then refuses to exec it.
+if out=$(docker exec -u 1000 "$name-gpu" nvtop --version 2>&1); then
+    record "T8 nvtop starts" PASS "$out"
+else
+    record "T8 nvtop starts" FAIL "nvtop --version as uid 1000: $out"
+fi
 
 # ---- T9: MESA MCP stack ------------------------------------------------------------
 # MESA MCP stack: /opt/mesa imports mesa-mcp + mesa-ducklake on DuckDB 2.x (catalogs it writes are DuckDB 2-only)
