@@ -32,6 +32,7 @@ ARG AWSCLI_SHA256_X86_64=5def7d1b7e55d892f9a381bb2cb2081a685712464be0d36d5d706af
 ARG AWSCLI_SHA256_AARCH64=07711a936e9d271045ab937d2c2c5390c25f419e4ba9e25adb9e996031e3f6be
 ARG DUCKDB_SHA256_AMD64=c6507206baf7793c6013dbd82368469a45f20dc0e17a6f92f204602f652ed2bc
 ARG DUCKDB_SHA256_ARM64=859e1875d2a9515fbb4bf8871061437a14af82320da68c753f094c4b776348fe
+ARG DUCKDB_R_SHA256=23db64ca8054c7984dba06958ae9d530579cb7430831ac4f503f33a44f013741
 ARG CLAUDE_CODE_VERSION=2.1.310
 ARG CODEX_VERSION=0.164.0
 ARG CCR_VERSION=3.1.3
@@ -227,6 +228,21 @@ RUN python3 -m pip install --no-cache-dir jupyter-vscode-proxy \
 
 RUN mamba install -y -c conda-forge jupyter-server-proxy && \
     mamba clean -afy
+
+# DuckDB for R (the R kernel and RStudio), on the same DuckDB version as the CLI
+# and the Python package above, so R opens the same DuckDB 2-only catalogs.
+# conda-forge's r-duckdb is still DuckDB 1.5 and has no linux-aarch64 build, so
+# this compiles the CRAN source package (it bundles DuckDB) with the conda R
+# toolchain. CRAN moves a superseded release to Archive/, hence the second URL.
+# The checks fail the build unless R loads the package and it reports the
+# pinned DuckDB version.
+ARG DUCKDB_R_VERSION=2.0.0
+RUN curl -fsSL -o /tmp/duckdb-r.tar.gz "https://cran.r-project.org/src/contrib/duckdb_${DUCKDB_R_VERSION}.tar.gz" || \
+    curl -fsSL -o /tmp/duckdb-r.tar.gz "https://cran.r-project.org/src/contrib/Archive/duckdb/duckdb_${DUCKDB_R_VERSION}.tar.gz"; \
+    echo "${DUCKDB_R_SHA256}  /tmp/duckdb-r.tar.gz" | sha256sum -c - && \
+    MAKEFLAGS="-j$(nproc)" R CMD INSTALL --no-docs --no-test-load /tmp/duckdb-r.tar.gz && \
+    rm -f /tmp/duckdb-r.tar.gz && \
+    Rscript -e "library(duckdb); con <- dbConnect(duckdb()); v <- dbGetQuery(con, 'SELECT version() AS v')[['v']]; dbDisconnect(con, shutdown = TRUE); stopifnot(identical(v, 'v${DUCKDB_VERSION}')); cat('R duckdb', as.character(packageVersion('duckdb')), 'on DuckDB', v, '\n')"
 
 # Configure bashrc. The motd only prints in interactive shells. The base skel
 # .bashrc already runs the conda shell hook, so conda is NOT re-sourced here.
